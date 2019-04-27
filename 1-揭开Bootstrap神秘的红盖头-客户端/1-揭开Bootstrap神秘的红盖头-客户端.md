@@ -319,24 +319,27 @@ protected EventLoop newChild(Executor executor, Object... args) throws Exception
 回顾一下 AbstractBootstrap.initAndRegister 方法：
 ```
 final ChannelFuture initAndRegister() {
-	// 去掉非关键代码
+    // 去掉非关键代码
     final Channel channel = channelFactory().newChannel();
     init(channel);
     ChannelFuture regFuture = group().register(channel);
 }
 ```
 当Channel 初始化后，会紧接着调用 group().register() 方法来注册 Channel，我们继续跟踪的话，会发现其调用链如下：
+
 AbstractBootstrap.initAndRegister -> MultithreadEventLoopGroup.register -> SingleThreadEventLoop.register -> AbstractUnsafe.register
+
 通过跟踪调用链，最终我们发现是调用到了 unsafe 的 register 方法，那么接下来我们就仔细看一下 AbstractUnsafe.register 方法中到底做了什么：
 ```
 @Override
 public final void register(EventLoop eventLoop, final ChannelPromise promise) {
-	// 省略条件判断和错误处理
+    // 省略条件判断和错误处理
     AbstractChannel.this.eventLoop = eventLoop;
     register0(promise);
 }
 ```
 首先，将 eventLoop 赋值给 Channel 的 eventLoop 属性，而我们知道这个 eventLoop 对象其实是 MultithreadEventLoopGroup.next() 方法获取的，根据我们前面 **关于 EventLoop 初始化** 小节中，我们可以确定 next() 方法返回的 eventLoop 对象是 NioEventLoop 实例。
+
 register 方法接着调用了 register0 方法：
 ```
 private void register0(ChannelPromise promise) {
@@ -357,7 +360,7 @@ register0 又调用了 AbstractNioChannel.doRegister：
 ```
 @Override
 protected void doRegister() throws Exception {
-	// 省略错误处理
+    // 省略错误处理
     selectionKey = javaChannel().register(eventLoop().selector, 0, this);
 }
 ```
@@ -371,11 +374,15 @@ javaChannel() 这个方法在前面我们已经知道了，它返回的是一个
  - 在 AbstractUnsafe.register0 中，调用 AbstractNioChannel.doRegister 方法
  - AbstractNioChannel.doRegister 方法通过 javaChannel().register(eventLoop().selector, 0, this) 将 Channel 对应的 Java NIO SockerChannel 注册到一个 eventLoop 的 Selector 中，并且将当前 Channel 作为 attachment
 
-总的来说，Channel 注册过程所做的工作就是将 Channel 与对应的 EventLoop 关联，因此这也体现了，在 Netty 中，每个 Channel 都会关联一个特定的 EventLoop，并且这个 Channel 中的所有 IO 操作都是在这个 EventLoop 中执行的; 当关联好 Channel 和 EventLoop 后，会继续调用底层的 Java NIO SocketChannel 的 register 方法，将底层的 Java NIO SocketChannel 注册到指定的 selector 中。通过这两步，就完成了 Netty Channel 的注册过程.
+总的来说，Channel 注册过程所做的工作就是将 Channel 与对应的 EventLoop 关联，因此这也体现了，在 Netty 中，每个 Channel 都会关联一个特定的 EventLoop，并且这个 Channel 中的所有 IO 操作都是在这个 EventLoop 中执行的，当关联好 Channel 和 EventLoop 后，会继续调用底层的 Java NIO SocketChannel 的 register 方法，将底层的 Java NIO SocketChannel 注册到指定的 selector 中。通过这两步，就完成了 Netty Channel 的注册过程。
 
 ### handler 的添加过程
-Netty 的一个强大和灵活之处就是基于 Pipeline 的自定义 handler 机制。基于此，我们可以像添加插件一样自由组合各种各样的 handler 来完成业务逻辑。例如我们需要处理 HTTP 数据，那么就可以在 pipeline 前添加一个 Http 的编解码的 Handler，然后接着添加我们自己的业务逻辑的 handler，这样网络上的数据流就向通过一个管道一样，从不同的 handler 中流过并进行编解码，最终在到达我们自定义的 handler 中.
-既然说到这里，有些读者朋友肯定会好奇，既然这个 pipeline 机制是这么的强大，那么它是怎么实现的呢？ 不过我这里不打算详细展开 Netty 的 ChannelPipeline 的实现机制(具体的细节会在后续的章节中展示)，我在这一小节中，从简单的入手，展示一下我们自定义的 handler 是如何以及何时添加到 ChannelPipeline 中的.
+Netty 的一个强大和灵活之处就是基于 Pipeline 的自定义 handler 机制。基于此，我们可以像添加插件一样自由组合各种各样的 handler 来完成业务逻辑。
+
+例如我们需要处理 HTTP 数据，那么就可以在 pipeline 前添加一个 Http 的编解码的 Handler，然后接着添加我们自己的业务逻辑的 handler，这样网络上的数据流就向通过一个管道一样，从不同的 handler 中流过并进行编解码，最终在到达我们自定义的 handler 中。
+
+既然说到这里，有些读者朋友肯定会好奇，既然这个 pipeline 机制是这么的强大，那么它是怎么实现的呢？ 不过我这里不打算详细展开 Netty 的 ChannelPipeline 的实现机制(具体的细节会在后续的章节中展示)，我在这一小节中，从简单的入手，展示一下我们自定义的 handler 是如何以及何时添加到 ChannelPipeline 中的。
+
 首先让我们看一下如下的代码片段：
 ```
 ...
@@ -410,20 +417,24 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
 }
 ```
 ChannelInitializer 是一个抽象类，它有一个抽象的方法 initChannel，我们正是实现了这个方法，并在这个方法中添加的自定义的 handler 的。那么 initChannel 是哪里被调用的呢？ 答案是 ChannelInitializer.channelRegistered 方法中。
+
 我们来关注一下 channelRegistered 方法。从上面的源码中，我们可以看到，在 channelRegistered 方法中，会调用 initChannel 方法，将自定义的 handler 添加到 ChannelPipeline 中，然后调用 ctx.pipeline().remove(this) 将自己从 ChannelPipeline 中删除。上面的分析过程，可以用如下图片展示：
-一开始，ChannelPipeline 中只有三个 handler，head，tail 和我们添加的 ChannelInitializer.
+
+一开始，ChannelPipeline 中只有三个 handler，head，tail 和我们添加的 ChannelInitializer。
+
 ![Alt text](./1477130291691.png)
 接着 initChannel 方法调用后，添加了自定义的 handler：
 ![Alt text](./1477130295919.png)
 最后将 ChannelInitializer 删除：
 ![Alt text](./1477130299722.png)
 
-分析到这里，我们已经简单了解了自定义的 handler 是如何添加到 ChannelPipeline 中的，不过限于主题与篇幅的原因，我没有在这里详细展开 ChannelPipeline 的底层机制，我打算在下一篇 **Netty 源码分析之 二 贯穿Netty 的大动脉 ── ChannelPipeline** 中对这个问题进行深入的探讨.
+分析到这里，我们已经简单了解了自定义的 handler 是如何添加到 ChannelPipeline 中的，不过限于主题与篇幅的原因，我没有在这里详细展开 ChannelPipeline 的底层机制，我打算在下一篇 **2-贯穿Netty的大动脉-ChannelPipeline** 中对这个问题进行深入的探讨。
 
 ### 客户端连接分析
-经过上面的各种分析后，我们大致了解了 Netty 初始化时，所做的工作，那么接下来我们就直奔主题，分析一下客户端是如何发起 TCP 连接的.
+经过上面的各种分析后，我们大致了解了 Netty 初始化时，所做的工作，那么接下来我们就直奔主题，分析一下客户端是如何发起 TCP 连接的。
 
-首先，客户端通过调用 **Bootstrap** 的 **connect** 方法进行连接.
+首先，客户端通过调用 **Bootstrap** 的 **connect** 方法进行连接。
+
 在 connect 中，会进行一些参数检查后，最终调用的是 **doConnect0** 方法，其实现如下：
 ```
 private static void doConnect0(
@@ -449,8 +460,9 @@ private static void doConnect0(
     });
 }
 ```
-在 doConnect0 中，会在 event loop 线程中调用 Channel 的 connect 方法，而这个 Channel 的具体类型是什么呢？ 我们在 Channel 初始化这一小节中已经分析过了，这里 channel 的类型就是 **NioSocketChannel**.
-进行跟踪到 channel.connect 中，我们发现它调用的是 DefaultChannelPipeline#connect，而pipeline 的 connect 代码如下：
+在 doConnect0 中，会在 event loop 线程中调用 Channel 的 connect 方法，而这个 Channel 的具体类型是什么呢？ 我们在 Channel 初始化这一小节中已经分析过了，这里 channel 的类型就是 **NioSocketChannel**。
+
+进行跟踪到 channel.connect 中，我们发现它调用的是DefaultChannelPipeline#connect，而pipeline 的 connect 代码如下：
 ```
 @Override
 public ChannelFuture connect(SocketAddress remoteAddress) {
@@ -463,7 +475,7 @@ public ChannelFuture connect(SocketAddress remoteAddress) {
 public ChannelFuture connect(
         final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise promise) {
 
-	// 删除的参数检查的代码
+    // 删除的参数检查的代码
     final AbstractChannelHandlerContext next = findContextOutbound();
     EventExecutor executor = next.executor();
     if (executor.inEventLoop()) {
@@ -487,7 +499,8 @@ private void invokeConnect(SocketAddress remoteAddress, SocketAddress localAddre
     ((ChannelOutboundHandler) handler()).connect(this, remoteAddress, localAddress, promise);
 }
 ```
-还记得我们在 "关于 pipeline 的初始化" 这一小节分析的的内容吗？ 我们提到，在 DefaultChannelPipeline 的构造器中，会实例化两个对象： head 和 tail，并形成了双向链表的头和尾。head 是 HeadContext 的实例，它实现了 ChannelOutboundHandler 接口，并且它的 outbound 字段为 true。因此在 findContextOutbound 中，找到的 AbstractChannelHandlerContext 对象其实就是 head。进而在 invokeConnect 方法中，我们向上转换为 ChannelOutboundHandler 就是没问题的了.
+还记得我们在 "关于 pipeline 的初始化" 这一小节分析的的内容吗？ 我们提到，在 DefaultChannelPipeline 的构造器中，会实例化两个对象： head 和 tail，并形成了双向链表的头和尾。head 是 HeadContext 的实例，它实现了 ChannelOutboundHandler 接口，并且它的 outbound 字段为 true。因此在 findContextOutbound 中，找到的 AbstractChannelHandlerContext 对象其实就是 head。进而在 invokeConnect 方法中，我们向上转换为 ChannelOutboundHandler 就是没问题的了。
+
 而又因为 HeadContext 重写了 connect 方法，因此实际上调用的是 HeadContext.connect。我们接着跟踪到 HeadContext.connect，其代码如下：
 ```
 @Override
@@ -499,7 +512,9 @@ public void connect(
 }
 ```
 这个 connect 方法很简单，仅仅调用了 unsafe 的 connect 方法。而 unsafe 又是什么呢？
+
 回顾一下 HeadContext 的构造器，我们发现 unsafe 是 pipeline.channel().unsafe() 返回的，而 Channel 的 unsafe 字段，在这个例子中，我们已经知道了，其实是 AbstractNioByteChannel.NioByteUnsafe 内部类。兜兜转转了一大圈，我们找到了创建 Socket 连接的关键代码。
+
 进行跟踪 NioByteUnsafe -> AbstractNioUnsafe.connect：
 ```
 @Override
@@ -537,6 +552,8 @@ protected boolean doConnect(SocketAddress remoteAddress, SocketAddress localAddr
 }
 ```
 我们终于看到的最关键的部分了，庆祝一下!
+
 上面的代码不用多说，首先是获取 Java NIO SocketChannel，即我们已经分析过的，从 NioSocketChannel.newSocket 返回的 SocketChannel 对象; 然后是调用 SocketChannel.connect 方法完成 Java NIO 层面上的 Socket 的连接。
+
 最后，上面的代码流程可以用如下时序图直观地展示：
 ![Alt text](./Netty客户端的连接时序图.png)
