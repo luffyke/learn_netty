@@ -361,7 +361,7 @@ register0 又调用了 AbstractNioChannel.doRegister：
 @Override
 protected void doRegister() throws Exception {
     // 省略错误处理
-    selectionKey = javaChannel().register(eventLoop().selector, 0, this);
+    selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
 }
 ```
 javaChannel() 这个方法在前面我们已经知道了，它返回的是一个 Java NIO SocketChannel，这里我们将这个 SocketChannel 注册到与 eventLoop 关联的 selector 上了。
@@ -381,7 +381,7 @@ Netty 的一个强大和灵活之处就是基于 Pipeline 的自定义 handler �
 
 例如我们需要处理 HTTP 数据，那么就可以在 pipeline 前添加一个 Http 的编解码的 Handler，然后接着添加我们自己的业务逻辑的 handler，这样网络上的数据流就向通过一个管道一样，从不同的 handler 中流过并进行编解码，最终在到达我们自定义的 handler 中。
 
-既然说到这里，有些读者朋友肯定会好奇，既然这个 pipeline 机制是这么的强大，那么它是怎么实现的呢？ 不过我这里不打算详细展开 Netty 的 ChannelPipeline 的实现机制(具体的细节会在后续的章节中展示)，我在这一小节中，从简单的入手，展示一下我们自定义的 handler 是如何以及何时添加到 ChannelPipeline 中的。
+既然说到这里，有些读者朋友肯定会好奇，既然这个 pipeline 机制是这么的强大，那么它是怎么实现的呢？ 不过我这里不打算详细展开 Netty 的 ChannelPipeline 的实现机制（具体的细节会在后续的章节中展示），我在这一小节中，从简单的入手，展示一下我们自定义的 handler 是如何以及何时添加到 ChannelPipeline 中的。
 
 首先让我们看一下如下的代码片段：
 ```
@@ -398,7 +398,7 @@ Netty 的一个强大和灵活之处就是基于 Pipeline 的自定义 handler �
      }
  });
 ```
-这个代码片段就是实现了 handler 的添加功能。我们看到，Bootstrap.handler 方法接收一个 ChannelHandler，而我们传递的是一个 派生于 ChannelInitializer 的匿名类，它正好也实现了 ChannelHandler 接口。我们来看一下，ChannelInitializer  类内到底有什么玄机：
+这个代码片段就是实现了 handler 的添加功能。我们看到，Bootstrap.handler 方法接收一个 ChannelHandler，而我们传递的是一个 派生于 ChannelInitializer 的匿名类，它正好也实现了 ChannelHandler 接口。我们来看一下，ChannelInitializer 类内到底有什么玄机：
 ```
 @Sharable
 public abstract class ChannelInitializer<C extends Channel> extends ChannelInboundHandlerAdapter {
@@ -435,38 +435,32 @@ ChannelInitializer 是一个抽象类，它有一个抽象的方法 initChannel�
 
 首先，客户端通过调用 **Bootstrap** 的 **connect** 方法进行连接。
 
-在 connect 中，会进行一些参数检查后，最终调用的是 **doConnect0** 方法，其实现如下：
+在 connect 中，会进行一些参数检查后，最终调用的是 **doConnect** 方法，其实现如下：
 ```
-private static void doConnect0(
-        final ChannelFuture regFuture, final Channel channel,
-        final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise promise) {
-
-    // This method is invoked before channelRegistered() is triggered。 Give user handlers a chance to set up
+private static void doConnect(final SocketAddress remoteAddress, final SocketAddress localAddress, final ChannelPromise connectPromise) {
+    // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
     // the pipeline in its channelRegistered() implementation.
+    final Channel channel = connectPromise.channel();
     channel.eventLoop().execute(new Runnable() {
         @Override
         public void run() {
-            if (regFuture.isSuccess()) {
-                if (localAddress == null) {
-                    channel.connect(remoteAddress, promise);
-                } else {
-                    channel.connect(remoteAddress, localAddress, promise);
-                }
-                promise.addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
+            if (localAddress == null) {
+                channel.connect(remoteAddress, connectPromise);
             } else {
-                promise.setFailure(regFuture.cause());
+                channel.connect(remoteAddress, localAddress, connectPromise);
             }
+            connectPromise.addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
         }
     });
 }
 ```
-在 doConnect0 中，会在 event loop 线程中调用 Channel 的 connect 方法，而这个 Channel 的具体类型是什么呢？ 我们在 Channel 初始化这一小节中已经分析过了，这里 channel 的类型就是 **NioSocketChannel**。
+在 doConnect 中，会在 event loop 线程中调用 Channel 的 connect 方法，而这个 Channel 的具体类型是什么呢？ 我们在 Channel 初始化这一小节中已经分析过了，这里 channel 的类型就是 **NioSocketChannel**。
 
 进行跟踪到 channel.connect 中，我们发现它调用的是DefaultChannelPipeline#connect，而pipeline 的 connect 代码如下：
 ```
 @Override
-public ChannelFuture connect(SocketAddress remoteAddress) {
-    return tail.connect(remoteAddress);
+public ChannelFuture connect(SocketAddress remoteAddress, ChannelPromise promise) {
+    return tail.connect(remoteAddress, promise);
 }
 ```
 而 tail 字段，我们已经分析过了，是一个 TailContext 的实例，而 TailContext 又是 AbstractChannelHandlerContext 的子类，并且没有实现 connect 方法，因此这里调用的其实是 AbstractChannelHandlerContext.connect，我们看一下这个方法的实现：
@@ -488,7 +482,6 @@ public ChannelFuture connect(
             }
         }, promise, null);
     }
-
     return promise;
 }
 ```
