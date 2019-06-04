@@ -670,7 +670,7 @@ while (keyIterator.hasNext()) {
 当调用了 Selector.close()方法时，我们其实是关闭了 Selector 本身并且将所有的 SelectionKey 失效，但是并不会关闭 Channel。
 
 ### 完整的 Selector 例子
-```
+```java
 public class NioEchoServer {
     private static final int BUF_SIZE = 256;
     private static final int TIMEOUT = 3000;
@@ -748,3 +748,4 @@ public class NioEchoServer {
     }
 }
 ```
+
