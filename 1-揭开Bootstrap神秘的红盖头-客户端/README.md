@@ -222,10 +222,10 @@ protected DefaultChannelPipeline(Channel channel) {
 DefaultChannelPipeline 会将这个 NioSocketChannel 对象保存在channel 字段中。DefaultChannelPipeline 中，还有两个特殊的字段，即 head 和 tail，而这两个字段是一个双向链表的头和尾。其实在 DefaultChannelPipeline 中，维护了一个以 AbstractChannelHandlerContext 为节点的双向链表，这个链表是 Netty 实现 Pipeline 机制的关键。关于 DefaultChannelPipeline 中的双向链表以及它所起的作用，我在这里暂时不表，在 **3-贯穿Netty 的大动脉-ChannelPipeline** 中会有详细的分析。
 
 HeadContext 的继承层次结构如下所示：
-![Alt text](./headContext.png)
+![Alt text](./HeadContext.png)
 
 TailContext 的继承层次结构如下所示：
-![Alt text](./tailContext.png)
+![Alt text](./TailContext.png)
 
 我们可以看到，链表中 head 是一个 **ChannelOutboundHandler**和**ChannelInboundHandler**，而 tail 则是一个 **ChannelInboundHandler**。
 
