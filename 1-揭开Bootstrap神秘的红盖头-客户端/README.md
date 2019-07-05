@@ -1,5 +1,5 @@
 ## 1-揭开 Bootstrap 神秘的红盖头-客户端
-这一章是 Netty 源码分析系列的第一章，我打算在这一章中，展示一下 Netty 的客户端和服务端的初始化和启动的流程， 给读者一个对 Netty 源码有一个大致的框架上的认识，而不会深入每个功能模块。
+这一章是 Netty 源码分析系列的第一章，我打算在这一章中，展示一下 Netty 的客户端和服务端的初始化和启动的流程，给读者一个对 Netty 源码有一个大致的框架上的认识，而不会深入每个功能模块。
 
 本章会从 Bootstrap/ServerBootstrap 类入手，分析 Netty 程序的初始化和启动的流程。
 
@@ -64,7 +64,7 @@ NioSocketChannel 的类层次结构如下：
 - OioSctpChannel，同步的 Sctp 服务器端连接
 - OioSctpServerChannel，同步的客户端 TCP Socket 连接
 
-那么我们是如何设置所需要的 Channel 的类型的呢？ 答案是 channel() 方法的调用。
+那么我们是如何设置所需要的 Channel 的类型的呢？答案是 channel() 方法的调用。
 
 回想一下我们在客户端连接代码的初始化 Bootstrap 中，会调用 channel() 方法，传入 NioSocketChannel.class，这个方法其实就是初始化了一个 ReflectiveChannelFactory：
 ```
@@ -157,7 +157,7 @@ protected AbstractChannel(Channel parent) {
 
 到这里，一个完整的 NioSocketChannel 就初始化完成了，我们可以稍微总结一下构造一个 NioSocketChannel 所需要做的工作：
 - 调用 NioSocketChannel.newSocket(DEFAULT_SELECTOR_PROVIDER) 打开一个新的 Java NIO SocketChannel
-- AbstractChannel(Channel parent) 中初始化 AbstractChannel 的属性： 
+- AbstractChannel(Channel parent) 中初始化 AbstractChannel 的属性：
   - parent 属性置为 null
   - unsafe 通过newUnsafe() 实例化一个 unsafe 对象，它的类型是 AbstractNioByteChannel.NioByteUnsafe 内部类
   - pipeline 是 new DefaultChannelPipeline(this) 新创建的实例。`这里体现了：Each channel has its own pipeline and it is created automatically when a new channel is created。`
@@ -251,7 +251,7 @@ TailContext 的构造器它调用了父类 AbstractChannelHandlerContext 的构�
 NioEventLoop 有几个重载的构造器，不过内容都没有什么区别，最终都是调用的父类MultithreadEventLoopGroup构造器：
 ```
 protected MultithreadEventLoopGroup(int nThreads, ThreadFactory threadFactory, Object... args) {
-    super(nThreads == 0? DEFAULT_EVENT_LOOP_THREADS ： nThreads, threadFactory, args);
+    super(nThreads == 0? DEFAULT_EVENT_LOOP_THREADS ：nThreads, threadFactory, args);
 }
 ```
 其中有一点有意思的地方是，如果我们传入的线程数 nThreads 是0，那么 Netty 会为我们设置默认的线程数 DEFAULT_EVENT_LOOP_THREADS，而这个默认的线程数是怎么确定的呢？
@@ -310,7 +310,7 @@ protected EventLoop newChild(Executor executor, Object... args) throws Exception
 - 如果我们在实例化 NioEventLoopGroup 时，如果指定线程池大小，则 nThreads 就是指定的值，反之是处理器核心数 * 2
 - MultithreadEventExecutorGroup 中会调用 newChild 抽象方法来初始化 children 数组
 - 抽象方法 newChild 是在 NioEventLoopGroup 中实现的，它返回一个 NioEventLoop 实例。- NioEventLoop 属性：
-  - SelectorProvider provider 属性： NioEventLoopGroup 构造器中通过 SelectorProvider.provider() 获取一个 SelectorProvider
+  - SelectorProvider provider 属性：NioEventLoopGroup 构造器中通过 SelectorProvider.provider() 获取一个 SelectorProvider
   - SelectStrategy strategy：DefaultSelectStrategyFactory的单例
   - RejectedExecutionHandler rejectedExecutionHandler：RejectedExecutionHandlers.reject()
 
@@ -381,7 +381,7 @@ Netty 的一个强大和灵活之处就是基于 Pipeline 的自定义 handler �
 
 例如我们需要处理 HTTP 数据，那么就可以在 pipeline 前添加一个 Http 的编解码的 Handler，然后接着添加我们自己的业务逻辑的 handler，这样网络上的数据流就向通过一个管道一样，从不同的 handler 中流过并进行编解码，最终在到达我们自定义的 handler 中。
 
-既然说到这里，有些读者朋友肯定会好奇，既然这个 pipeline 机制是这么的强大，那么它是怎么实现的呢？ 不过我这里不打算详细展开 Netty 的 ChannelPipeline 的实现机制（具体的细节会在后续的章节中展示），我在这一小节中，从简单的入手，展示一下我们自定义的 handler 是如何以及何时添加到 ChannelPipeline 中的。
+既然说到这里，有些读者朋友肯定会好奇，既然这个 pipeline 机制是这么的强大，那么它是怎么实现的呢？不过我这里不打算详细展开 Netty 的 ChannelPipeline 的实现机制（具体的细节会在后续的章节中展示），我在这一小节中，从简单的入手，展示一下我们自定义的 handler 是如何以及何时添加到 ChannelPipeline 中的。
 
 首先让我们看一下如下的代码片段：
 ```
@@ -416,7 +416,7 @@ public abstract class ChannelInitializer<C extends Channel> extends ChannelInbou
     ...
 }
 ```
-ChannelInitializer 是一个抽象类，它有一个抽象的方法 initChannel，我们正是实现了这个方法，并在这个方法中添加的自定义的 handler 的。那么 initChannel 是哪里被调用的呢？ 答案是 ChannelInitializer.channelRegistered 方法中。
+ChannelInitializer 是一个抽象类，它有一个抽象的方法 initChannel，我们正是实现了这个方法，并在这个方法中添加的自定义的 handler 的。那么 initChannel 是哪里被调用的呢？答案是 ChannelInitializer.channelRegistered 方法中。
 
 我们来关注一下 channelRegistered 方法。从上面的源码中，我们可以看到，在 channelRegistered 方法中，会调用 initChannel 方法，将自定义的 handler 添加到 ChannelPipeline 中，然后调用 ctx.pipeline().remove(this) 将自己从 ChannelPipeline 中删除。上面的分析过程，可以用如下图片展示：
 
@@ -454,7 +454,7 @@ private static void doConnect(final SocketAddress remoteAddress, final SocketAdd
     });
 }
 ```
-在 doConnect 中，会在 event loop 线程中调用 Channel 的 connect 方法，而这个 Channel 的具体类型是什么呢？ 我们在 Channel 初始化这一小节中已经分析过了，这里 channel 的类型就是 **NioSocketChannel**。
+在 doConnect 中，会在 event loop 线程中调用 Channel 的 connect 方法，而这个 Channel 的具体类型是什么呢？我们在 Channel 初始化这一小节中已经分析过了，这里 channel 的类型就是 **NioSocketChannel**。
 
 进行跟踪到 channel.connect 中，我们发现它调用的是DefaultChannelPipeline#connect，而pipeline 的 connect 代码如下：
 ```
@@ -492,7 +492,7 @@ private void invokeConnect(SocketAddress remoteAddress, SocketAddress localAddre
     ((ChannelOutboundHandler) handler()).connect(this, remoteAddress, localAddress, promise);
 }
 ```
-还记得我们在 "关于 pipeline 的初始化" 这一小节分析的的内容吗？ 我们提到，在 DefaultChannelPipeline 的构造器中，会实例化两个对象： head 和 tail，并形成了双向链表的头和尾。head 是 HeadContext 的实例，它实现了 ChannelOutboundHandler 接口，并且它的 outbound 字段为 true。因此在 findContextOutbound 中，找到的 AbstractChannelHandlerContext 对象其实就是 head。进而在 invokeConnect 方法中，我们向上转换为 ChannelOutboundHandler 就是没问题的了。
+还记得我们在 "关于 pipeline 的初始化" 这一小节分析的的内容吗？我们提到，在 DefaultChannelPipeline 的构造器中，会实例化两个对象：head 和 tail，并形成了双向链表的头和尾。head 是 HeadContext 的实例，它实现了 ChannelOutboundHandler 接口，并且它的 outbound 字段为 true。因此在 findContextOutbound 中，找到的 AbstractChannelHandlerContext 对象其实就是 head。进而在 invokeConnect 方法中，我们向上转换为 ChannelOutboundHandler 就是没问题的了。
 
 而又因为 HeadContext 重写了 connect 方法，因此实际上调用的是 HeadContext.connect。我们接着跟踪到 HeadContext.connect，其代码如下：
 ```
